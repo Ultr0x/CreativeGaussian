@@ -3,6 +3,7 @@ from diffusers import AutoPipelineForText2Image
 import torch
 import matplotlib.pyplot as plt
 import subprocess
+from PIL import Image
 
 def main():
     # Parse command line arguments
@@ -21,14 +22,11 @@ def main():
     ).to("cuda")
     
     generator = torch.Generator("cuda").manual_seed(args.seed)
-    image = pipeline(args.prompt, generator=generator).images[0]
-
-    # Display and save the image
-    plt.imshow(image)
-    plt.axis('off')  # Hide axis
+    image = pipeline(args.prompt, generator=generator, height=1024, width=1024).images[0]
+    
 
     try:
-        plt.savefig(save_path, bbox_inches='tight', pad_inches=0)
+        image.save(save_path)
         print(f"Image saved to {save_path}")
 
         # Call process.py

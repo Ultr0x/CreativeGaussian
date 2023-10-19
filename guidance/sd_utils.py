@@ -16,6 +16,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import os
+from PIL import Image
 
 def seed_everything(seed):
     torch.manual_seed(seed)
@@ -287,6 +289,15 @@ class StableDiffusion(nn.Module):
         # Img to Numpy
         imgs = imgs.detach().cpu().permute(0, 2, 3, 1).numpy()
         imgs = (imgs * 255).round().astype("uint8")
+
+         # Saving images to a folder named 'sd2'
+        sd2_folder = 'sd2'
+        if not os.path.exists(sd2_folder):
+            os.makedirs(sd2_folder)
+
+        for idx, img in enumerate(imgs):
+            img_path = os.path.join(sd2_folder, f'image_{idx}.png')
+            Image.fromarray(img).save(img_path)
 
         return imgs
 

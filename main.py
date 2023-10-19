@@ -18,6 +18,8 @@ from gs_renderer import Renderer, MiniCam
 from grid_put import mipmap_linear_grid_put_2d
 from mesh import Mesh, safe_normalize
 
+from PIL import Image
+
 class GUI:
     def __init__(self, opt):
         self.opt = opt  # shared with the trainer's opt to support in-place modification of rendering parameters.
@@ -63,7 +65,12 @@ class GUI:
         self.optimizer = None
         self.step = 0
         self.train_steps = 1  # steps per rendering loop
-        
+
+        #Saving SD imgaes
+        self.sd_image_save_path = "SD_folder"
+        if not os.path.exists(self.sd_image_save_path):
+            os.makedirs(self.sd_image_save_path)
+
         # load input data from cmdline
         if self.opt.input is not None:
             self.load_input(self.opt.input)
@@ -83,10 +90,6 @@ class GUI:
             dpg.create_context()
             self.register_dpg()
             self.test_step()
-        self.sd_image_save_path = "path/to/SD_folder"
-        if not os.path.exists(self.sd_image_save_path):
-            os.makedirs(self.sd_image_save_path)
-
 
     def __del__(self):
         if self.gui:
@@ -176,6 +179,11 @@ class GUI:
             self.renderer.gaussians.update_learning_rate(self.step)
 
             loss = 0
+            
+             # Check and create a directory to save the images
+            output_directory = 'rendered_images'
+            if not os.path.exists(output_directory):
+                os.makedirs(output_directory)
 
             ### known view
             if self.input_img_torch is not None:
@@ -185,11 +193,20 @@ class GUI:
                 # rgb loss
                 image = out["image"].unsqueeze(0) # [1, 3, H, W] in [0, 1]
                 loss = loss + 10000 * step_ratio * F.mse_loss(image, self.input_img_torch)
+                
+                 # Convert the image tensor to numpy and save
+                img_np = image.squeeze(0).detach().cpu().permute(1, 2, 0).numpy() * 255
+                img_path = os.path.join(output_directory, 'rendered_image.png')
+                Image.fromarray(img_np.astype('uint8')).save(img_path)
 
                 # mask loss
                 mask = out["alpha"].unsqueeze(0) # [1, 1, H, W] in [0, 1]
                 loss = loss + 1000 * step_ratio * F.mse_loss(mask, self.input_mask_torch)
 
+                # Convert the mask tensor to numpy and save
+                mask_np = mask.squeeze(0).squeeze(0).detach().cpu().numpy() * 255
+                mask_path = os.path.join(output_directory, 'rendered_mask.png')
+                Image.fromarray(mask_np.astype('uint8'), mode='L').save(mask_path)
             ### novel view (manual batch)
             render_resolution = 128 if step_ratio < 0.3 else (256 if step_ratio < 0.6 else 512)
             images = []
@@ -235,10 +252,12 @@ class GUI:
             # guidance loss
             if self.enable_sd:
                 loss = loss + self.opt.lambda_sd * self.guidance_sd.train_step(images, step_ratio)
-                 # Save the generated image(s) by SD
+
+                # Save the generated on each step
                 for idx, image in enumerate(images):
                     save_path = os.path.join(self.sd_image_save_path, f'sd_image_step_{self.step}_idx_{idx}.png')
                     save_image(image, save_path)
+
             if self.enable_zero123:
                 loss = loss + self.opt.lambda_zero123 * self.guidance_zero123.train_step(images, vers, hors, radii, step_ratio)
             
